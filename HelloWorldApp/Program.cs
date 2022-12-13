@@ -4,8 +4,7 @@ using PM.Scheduler.GTools;
 using PM.Scheduler.GTools.Models;
 
 Console.WriteLine("Hello, World!");
-RunDemo1();
-RunDemo2();
+RunDemo3();
 
 /*
  * Workshop with three machines. 
@@ -144,9 +143,6 @@ void RunDemo3()
     setupArray.Add(new List<int>() {0,2 }); //(prev=0, next=0)=>setup=0h; (prev=0, next=1)=>setup=2h; 
     setupArray.Add(new List<int>() {1,0 }); //(prev=1, next=0)=>setup=1h; (prev=1, next=1)=>setup=0h; 
 
-
-
-
     //1. Definimos recursos
     Resource fabUno = new Resource("Fab01");
     Resource fabDos = new Resource("Fab02");
@@ -166,7 +162,7 @@ void RunDemo3()
     op2_1.AddAllowedResource(fabUno, 15);
     op2_1.AddAllowedResource(fabDos, 18);
     op2_1.MaxWaitTime = 1;
-    op2_1.ProcessType = 0;
+    op2_1.ProcessType = 1;
     Operation op2 = new("Op02", "Operación 2");
     op2.AddProcess(op2_1);
 
@@ -175,7 +171,7 @@ void RunDemo3()
     op3_1.AddAllowedResource(fabUno, 10);
     op3_1.AddAllowedResource(fabDos, 16);
     op3_1.MaxWaitTime = 1;
-    op3_1.ProcessType = 1;
+    op3_1.ProcessType = 0;
     Operation op3 = new("Op03", "Operación 3");
     op3.AddProcess(op3_1);
 
