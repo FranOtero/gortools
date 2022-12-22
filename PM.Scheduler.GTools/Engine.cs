@@ -1,5 +1,6 @@
 ﻿using Google.OrTools.Sat;
 using PM.Scheduler.GTools.Models;
+using System.Threading.Tasks;
 
 namespace PM.Scheduler.GTools
 {
@@ -13,7 +14,9 @@ namespace PM.Scheduler.GTools
             _operations.AddRange(operations);
         }
 
-        public bool Calculate()
+        public bool Calculate() => Calculate(new());
+
+        public bool Calculate(Dictionary<KeyValuePair<int, int>, int> setupArray)
         {
             #region CrearModelo
             int minTime = 0;
@@ -21,6 +24,7 @@ namespace PM.Scheduler.GTools
 
             CpModel model = new CpModel();
             Dictionary<Resource, List<IntervalVar>> resourceIntervals = new();
+            Dictionary<Resource, List<GSchedule>> allTask = new();
             List<IntVar> ends = new();
             GSchedule previous = null;
             foreach (var operation in _operations)
@@ -47,8 +51,12 @@ namespace PM.Scheduler.GTools
 
                         if (!resourceIntervals.ContainsKey(allowed.Resource))
                             resourceIntervals.Add(allowed.Resource, new());
+                        if (!allTask.ContainsKey(allowed.Resource))
+                            allTask.Add(allowed.Resource, new());
                         resourceIntervals[allowed.Resource].Add(sc.Interval);
+                        allTask[allowed.Resource].Add(sc);
                     }
+
                     model.AddExactlyOne(_processes.Where(p => p.Process == process).Select(s => s.Presence));
                     if (previous != null)
                     {
@@ -58,14 +66,44 @@ namespace PM.Scheduler.GTools
                             model.Add(main.Start - previous.End <= previous.Process.MaxWaitTime.Value);
                         }
                     }
+                    if (process.NotBefore.HasValue)
+                    {
+                        model.Add(main.Start >= process.NotBefore.Value);
+                    }
                     previous = main;
                 }
                 previous = null;
             }
-            //que cada máquina no solape trabajos:
+            //each resource has no overlap intervals
             foreach (List<IntervalVar> intervals in resourceIntervals.Values)
             {
                 model.AddNoOverlap(intervals);
+            }
+            foreach (List<GSchedule> gs in allTask.Values)
+            {
+                for (int k = 0; k < gs.Count(); k++)
+                {
+                    for (int l = 0; l < gs.Count(); l++)
+                    {
+                        GSchedule task1;
+                        GSchedule task2;
+                        task1 = gs[k];
+                        task2 = gs[l];
+                        int? i = task1.Process.ProcessType;
+                        int? j = task2.Process.ProcessType;
+                        BoolVar b = model.NewBoolVar("");
+                        if (k < l && i.HasValue && j.HasValue)
+                        {
+                            KeyValuePair<int, int> key1 = new KeyValuePair<int, int>(i.Value, j.Value);
+                            KeyValuePair<int, int> key2 = new KeyValuePair<int, int>(j.Value, i.Value);
+                            if (setupArray.ContainsKey(key1) && setupArray.ContainsKey(key2))
+                            {
+                                model.Add(task2.Start - task1.End >= setupArray[key1]).OnlyEnforceIf(b);
+                                model.Add(task1.Start - task2.End >= setupArray[key2]).OnlyEnforceIf(b.Not());
+                            }
+                        }
+                    }
+                }
             }
 
             #endregion
@@ -79,6 +117,7 @@ namespace PM.Scheduler.GTools
             CpSolverStatus status = solver.Solve(model);
             Console.WriteLine($"Solve status: {status} - {solver.SolutionInfo()}");
             bool result = status == CpSolverStatus.Feasible || status == CpSolverStatus.Optimal;
+            Console.WriteLine($"Optimal Schedule Length: {solver.ObjectiveValue}");
             #endregion
 
             if (!result) return false;
@@ -106,7 +145,6 @@ namespace PM.Scheduler.GTools
 
             return true;
         }
-
         private int WorseMakeSpan()
         {
             int span = 0;
@@ -117,7 +155,7 @@ namespace PM.Scheduler.GTools
                     span += process.AllowedResources.Max(r => r.Duration);
                 }
             }
-            return span;
+            return span * 2;
         }
 
     }

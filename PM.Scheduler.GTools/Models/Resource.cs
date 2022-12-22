@@ -9,6 +9,7 @@ namespace PM.Scheduler.GTools.Models
 {
     public record Resource
     {
+        public Guid Id { get; set; }
         public string Code { get; set; }
         public string Description { get; set; }
 
@@ -19,6 +20,9 @@ namespace PM.Scheduler.GTools.Models
         public Resource(string code)
         {
             Code = code; Description = code;
+        }
+        public Resource()
+        {
         }
     }
 }

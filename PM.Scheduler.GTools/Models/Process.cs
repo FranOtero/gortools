@@ -12,8 +12,9 @@ namespace PM.Scheduler.GTools.Models
         public string Description { get; set; }
         public string OpCode { get; set; }
         public List<AllowedResource> AllowedResources { get; set; } = new();
-        public int ProcessType = 0;//Para matriz de cambio
+        public int? ProcessType = 0;//Para matriz de cambio
         public int? MaxWaitTime = null;
+        public int? NotBefore = null;
 
         public Process(string code, string description)
         {
