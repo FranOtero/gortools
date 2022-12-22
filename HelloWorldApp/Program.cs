@@ -2,8 +2,98 @@
 
 using PM.Scheduler.GTools;
 using PM.Scheduler.GTools.Models;
+using System.Data;
 
 Console.WriteLine("Hello, World!");
+
+void DemoMaterial()
+{
+    //We have to produce products (P)
+    //We can use different recipes for the same product, for example, ProductA can be produced with two recepits:
+    //- mixing 1units of Semielaborated1 with 2 of RawMat1 
+    //- mixing 5 units of RawMat1
+    //Semielaborated1 is produced with 2xRawMat1+2xRawMat2
+
+    //RECIPE 1 for Product A
+    List<Component> bom = new();
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "PA",
+        SubComponent = "S1",
+        Quantity = 1
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "PA",
+        SubComponent = "R1",
+        Quantity = 2
+    });
+    //RECIPE 2 FOR ProductA
+    bom.Add(new Component()
+    {
+        Recipe = 2,
+        Parent = "PA",
+        SubComponent = "R1",
+        Quantity = 5
+    });
+    //Recipe for S1
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "S1",
+        SubComponent = "R1",
+        Quantity = 2
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "S1",
+        SubComponent = "R2",
+        Quantity = 2
+    });
+
+    //we have a limited stock in factory: we can have stock of products, semielaborated or raw materials. Each stock has an entry/Created date and a Expire date
+    List<MaterialStockLine> stock = new List<MaterialStockLine>();
+    stock.Add(new() { Reference = "R1", Quantity = 50, CreatedOn = new DateTime(2022, 8, 1), ExpiresOn = new DateTime(2023, 1, 1) });
+    stock.Add(new() { Reference = "R1", Quantity = 350, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2024, 6, 1) });
+    stock.Add(new() { Reference = "R2", Quantity = 75, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2024, 6, 1) });
+    stock.Add(new() { Reference = "S1", Quantity = 15, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2025, 6, 1) });
+    stock.Add(new() { Reference = "PA", Quantity = 1, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2030, 6, 1) });
+    
+    //Finally, we have a demand to satisfy
+    List<MaterialOrder> orders= new List<MaterialOrder>();
+    orders.Add(new MaterialOrder()
+    {
+        Reference = "PA",
+        Quantity = 40,
+        Target = new DateTime(2023, 6, 1)
+    });
+
+
+    //Solve: How can I make 40 units of PA???????????
+    //I cannot use any component that expires before target date (I cannot use 50 units of R1 in first stock line)
+    //Solution1: using Recipe=1
+    // I'll need 40 S1-->15S1 from stock+25x2R1+25x2R2 
+    // I'l need 2x40 R1
+    // Total 15S1, 130xR1, 50xR2
+    //
+    //Solution2: using Recipe2
+    //I'll need 5x40 R1
+    //Total 200R1
+    
+    //Solution1 is better for MAX_STOCK criterium, because use more abundant material R1, maximizing stocks
+    //Solution2 is better for MIN_STOCK criterium, because reduces stock level, minimizin stocks
+    //Solution1 is better for FIFO criterium, because consumes First In first
+    //Solution1 is better for FEFO criterium, because consumes First to be Expired first
+
+
+
+
+
+
+}
 
 /*
  * Workshop with three machines. 
