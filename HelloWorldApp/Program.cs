@@ -1,10 +1,395 @@
 ﻿// See https://aka.ms/new-console-template for more information
 
+using Google.OrTools.Sat;
 using PM.Scheduler.GTools;
 using PM.Scheduler.GTools.Models;
 using System.Data;
 
 Console.WriteLine("Hello, World!");
+
+
+List<Component> bom = new List<Component>();
+List<MaterialStockLine> stock = new List<MaterialStockLine>();
+List<MaterialOrder> order = new List<MaterialOrder>();
+
+List<string> material = new List<string>();
+List<string> product = new List<string>();
+List<string> semi = new List<string>();
+List<int> recipe = new List<int>();
+
+Dictionary<string, List<IntVar>> product_var = new Dictionary<string, List<IntVar>>();
+Dictionary<string, List<IntVar>> semi_var = new Dictionary<string, List<IntVar>>();
+Dictionary<string, List<IntVar>> material_var = new Dictionary<string, List<IntVar>>();
+
+demo();
+void demo()
+{
+    addData();
+
+    foreach (var comp in bom)
+    {
+        if (!recipe.Contains(comp.Recipe))
+            recipe.Add(comp.Recipe);
+    }
+
+    List<Component> components = new List<Component>();
+
+    foreach (var r in recipe)
+    {
+        components.Clear();
+        foreach (var comp in bom)
+        {
+            if (comp.Recipe == r)
+                components.Add(comp);
+        }
+        Console.WriteLine("------- processing with recepie" + r + " --------------");
+        processEachRecipe(components);
+    }
+}
+
+void addData()
+{
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "PA",
+        SubComponent = "S1",
+        Quantity = 1
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "PA",
+        SubComponent = "R1",
+        Quantity = 2
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 2,
+        Parent = "PA",
+        SubComponent = "R1",
+        Quantity = 5
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "S1",
+        SubComponent = "R1",
+        Quantity = 2
+    });
+    bom.Add(new Component()
+    {
+        Recipe = 1,
+        Parent = "S1",
+        SubComponent = "R2",
+        Quantity = 2
+    });
+
+    bom.Add(new Component()
+    {
+        Recipe = 2,
+        Parent = "PB",
+        SubComponent = "R3",
+        Quantity = 3
+    });
+
+    stock.Add(new()
+    {
+        Reference = "R1",
+        Quantity = 50,
+        CreatedOn = new DateTime(2022, 8, 1),
+        ExpiresOn = new DateTime(2023, 1, 1)
+    });
+    stock.Add(new()
+    {
+        Reference = "R1",
+        Quantity = 350,
+        CreatedOn = new DateTime(2022, 12, 12),
+        ExpiresOn = new DateTime(2024, 6, 1)
+    });
+    stock.Add(new()
+    {
+        Reference = "R2",
+        Quantity = 75,
+        CreatedOn = new DateTime(2022, 12, 12),
+        ExpiresOn = new DateTime(2024, 6, 1)
+    });
+    stock.Add(new()
+    {
+        Reference = "R3",
+        Quantity = 100,
+        CreatedOn = new DateTime(2022, 12, 12),
+        ExpiresOn = new DateTime(2024, 6, 1)
+    });
+    stock.Add(new()
+    {
+        Reference = "S1",
+        Quantity = 15,
+        CreatedOn = new DateTime(2022, 12, 12),
+        ExpiresOn = new DateTime(2025, 6, 1)
+    });
+
+    stock.Add(new()
+    {
+        Reference = "PA",
+        Quantity = 1,
+        CreatedOn = new DateTime(2022, 12, 12),
+        ExpiresOn = new DateTime(2030, 6, 1)
+    });
+
+    order.Add(new()
+    {
+        Reference = "PA",
+        Quantity = 40,
+        Target = new DateTime(2023, 6, 1)
+    });
+    order.Add(new()
+    {
+        Reference = "PA",
+        Quantity = 10,
+        Target = new DateTime(2023, 6, 1)
+    });
+}
+void clearVariables()
+{
+    material.Clear();
+    product.Clear();
+    semi.Clear();
+    product_var.Clear();
+    semi_var.Clear();
+    material_var.Clear();
+}
+void processEachRecipe(List<Component> components)
+{
+    clearVariables();
+    foreach (var comp in components)
+    {
+        if (!isInParents(comp.SubComponent, bom) && isInSub(comp.SubComponent, bom))
+        {
+            if (!material.Contains(comp.SubComponent))
+                material.Add(comp.SubComponent);
+        }
+        if (isInParents(comp.Parent, bom) && !isInSub(comp.Parent, bom))
+        {
+            if (!product.Contains(comp.Parent))
+                product.Add(comp.Parent);
+        }
+        if (isInParents(comp.Parent, bom) && isInSub(comp.Parent, bom))
+        {
+            if (!semi.Contains(comp.Parent))
+                semi.Add(comp.Parent);
+        }
+        if (isInParents(comp.SubComponent, bom) && isInSub(comp.SubComponent, bom))
+        {
+            if (!semi.Contains(comp.SubComponent))
+                semi.Add(comp.SubComponent);
+        }
+    }
+    Dictionary<string, IntVar> sum_var = new Dictionary<string, IntVar>();
+    Dictionary<string, List<IntVar>> stock_material_var = new Dictionary<string, List<IntVar>>();
+    CpModel model = new CpModel();
+
+    foreach (var stock_item in stock)
+    {
+        if (order[0].Target < stock_item.CreatedOn || order[0].Target > stock_item.ExpiresOn)
+            continue;
+        if (!stock_material_var.ContainsKey(stock_item.Reference))
+        {
+            List<IntVar> list = new List<IntVar>();
+            IntVar v = model.NewIntVar(0, 10000, stock_item.Reference + "_" + stock_item.CreatedOn);
+            model.Add(v <= stock_item.Quantity);
+            list.Add(v);
+            stock_material_var[stock_item.Reference] = list;
+        }
+        else
+        {
+            IntVar v = model.NewIntVar(0, 10000, stock_item.Reference + "_" + stock_item.CreatedOn);
+            model.Add(v <= stock_item.Quantity);
+            stock_material_var[stock_item.Reference].Add(v);
+        }
+    }
+
+    foreach (var comp in components)
+    {
+        if (product.Contains(comp.Parent))
+        {
+            IntVar temp_var = model.NewIntVar(getOrderQuantity(comp.Parent), getOrderQuantity(comp.Parent), comp.Parent);
+            if (!product_var.ContainsKey(comp.Parent))
+            {
+                List<IntVar> list = new List<IntVar>();
+                list.Add(temp_var);
+                product_var[comp.Parent] = list;
+            }
+            else
+            {
+                // continue;
+                // product_var[comp.Parent].Add(temp_var);
+            }
+        }
+        if (semi.Contains(comp.SubComponent))
+        {
+            IntVar temp_var = model.NewIntVar(0, 10000, comp.SubComponent + "_" + comp.Parent);
+            model.Add(temp_var + LinearExpr.Sum(stock_material_var[comp.SubComponent]) == comp.Quantity * getParentIntVar(comp.Parent));
+
+            if (!semi_var.ContainsKey(comp.SubComponent))
+            {
+                List<IntVar> list = new List<IntVar>();
+                list.Add(temp_var);
+                semi_var[comp.SubComponent] = list;
+            }
+            else
+            {
+                semi_var[comp.SubComponent].Add(temp_var);
+            }
+        }
+        if (material.Contains(comp.SubComponent))
+        {
+            IntVar temp_var = model.NewIntVar(0, 10000, comp.SubComponent + "_" + comp.Parent);
+            model.Add(temp_var == comp.Quantity * getParentIntVar(comp.Parent));
+
+            if (!material_var.ContainsKey(comp.SubComponent))
+            {
+                List<IntVar> list = new List<IntVar>();
+                list.Add(temp_var);
+                material_var[comp.SubComponent] = list;
+            }
+            else
+            {
+                material_var[comp.SubComponent].Add(temp_var);
+            }
+
+        }
+    }
+
+    foreach (var key in material_var.Keys)
+    {
+        IntVar var = model.NewIntVar(0, 10000, key);
+        model.Add(LinearExpr.Sum(material_var[key]) == var);
+        sum_var[key] = var;
+    }
+
+    foreach (var key in sum_var.Keys)
+    {
+        model.Add(LinearExpr.Sum(stock_material_var[key]) == sum_var[key]);
+    }
+
+    foreach (var s in semi)
+    {
+        if (stock_material_var.ContainsKey(s))
+            model.Maximize(LinearExpr.Sum(stock_material_var[s]));
+    }
+
+    CpSolver solver = new CpSolver();
+    CpSolverStatus status = solver.Solve(model);
+
+    if (status == CpSolverStatus.Optimal || status == CpSolverStatus.Feasible)
+    {
+        foreach (var key in stock_material_var.Keys)
+        {
+            Console.WriteLine($"material : {key}");
+            foreach (var v in stock_material_var[key])
+            {
+                Console.WriteLine(v.ToString() + " = " + solver.Value(v));
+            }
+        }
+    }
+    else
+    {
+        Console.WriteLine("No solution found.");
+    }
+    //    printVars();
+}
+
+int getOrderQuantity(string item)
+{
+    foreach (var o in order)
+    {
+        if (o.Reference == item)
+            return o.Quantity;
+    }
+    return 0;
+}
+
+IntVar getParentIntVar(string item)
+{
+    if (product_var.ContainsKey(item))
+    {
+        List<IntVar> vars = product_var[item];
+        if (vars.Count > 0)
+            return vars.Last();
+    }
+    if (semi_var.ContainsKey(item))
+    {
+        List<IntVar> vars = semi_var[item];
+        if (vars.Count > 0)
+            return vars.Last();
+    }
+    return null;
+}
+
+void printItems()
+{
+    foreach (var item in product)
+    {
+        Console.Write(item.ToString() + " ");
+    }
+    Console.WriteLine();
+    foreach (var item in semi)
+    {
+        Console.Write(item.ToString() + " ");
+    }
+    Console.WriteLine();
+    foreach (var item in material)
+    {
+        Console.Write(item.ToString() + " ");
+    }
+    Console.WriteLine();
+}
+void printVars()
+{
+    foreach (var key in product_var.Keys)
+    {
+        Console.Write(key + ":" + product_var[key].Count);
+    }
+    Console.WriteLine();
+    foreach (var key in semi_var.Keys)
+    {
+        Console.Write(key + ":" + semi_var[key].Count);
+    }
+    Console.WriteLine();
+    foreach (var key in material_var.Keys)
+    {
+        Console.Write(key + ":" + material_var[key].Count);
+        Console.WriteLine();
+    }
+    Console.WriteLine();
+}
+bool isInParents(string item, List<Component> comps)
+{
+    foreach (var comp in comps)
+    {
+        if (comp.Parent.Equals(item))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool isInSub(string item, List<Component> comps)
+{
+    foreach (var comp in comps)
+    {
+        if (comp.SubComponent.Equals(item))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+
 
 void DemoMaterial()
 {
@@ -61,9 +446,9 @@ void DemoMaterial()
     stock.Add(new() { Reference = "R2", Quantity = 75, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2024, 6, 1) });
     stock.Add(new() { Reference = "S1", Quantity = 15, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2025, 6, 1) });
     stock.Add(new() { Reference = "PA", Quantity = 1, CreatedOn = new DateTime(2022, 12, 12), ExpiresOn = new DateTime(2030, 6, 1) });
-    
+
     //Finally, we have a demand to satisfy
-    List<MaterialOrder> orders= new List<MaterialOrder>();
+    List<MaterialOrder> orders = new List<MaterialOrder>();
     orders.Add(new MaterialOrder()
     {
         Reference = "PA",
@@ -82,7 +467,7 @@ void DemoMaterial()
     //Solution2: using Recipe2
     //I'll need 5x40 R1
     //Total 200R1
-    
+
     //Solution1 is better for MAX_STOCK criterium, because use more abundant material R1, maximizing stocks
     //Solution2 is better for MIN_STOCK criterium, because reduces stock level, minimizin stocks
     //Solution1 is better for FIFO criterium, because consumes First In first
